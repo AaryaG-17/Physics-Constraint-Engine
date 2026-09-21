@@ -1,0 +1,23 @@
+# PCE — Physics Constraint Engine
+# Python 3.10+
+
+# Astronomy / data
+astropy>=6.0.0          # Quantity, units, constants
+astroquery>=0.4.7       # TIC-8 and Gaia queries
+
+# Numerics
+numpy>=1.26.0           # Vectorised Monte Carlo
+scipy>=1.13.0           # Split-normal sampling, percentiles
+
+# Validation
+pydantic>=2.7.0         # Data contracts at every stage boundary
+
+# Testing
+pytest>=8.2.0           # Test runner
+pytest-cov>=5.0.0       # Coverage reports
+
+pandas>=2.0.0
+transitleastsquares>=1.12
+
+# Dev / optional
+ipykernel>=6.29.0       # Jupyter notebooks (notebooks/exploration.ipynb)

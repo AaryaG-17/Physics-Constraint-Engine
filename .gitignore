@@ -1,0 +1,72 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# Testing
+# =========================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Local astronomical data
+# =========================
+
+# Downloaded / cached catalog data
+data/cache/
+
+# Downloaded light curves
+data/tess_lc/
+
+# MAST downloads
+mastDownload/
+
+# =========================
+# Generated validation output
+# =========================
+data/validation_results.csv
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# OS-generated files
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Python packaging
+# =========================
+*.egg-info/
+dist/
+build/
+*.egg
