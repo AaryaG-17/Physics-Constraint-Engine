@@ -270,7 +270,7 @@ class BoundsDistribution(_QuantityModel):
 # Stage 4 output — Classifier
 # ---------------------------------------------------------------------------
 
-class PeriodDurationEnvelope(BaseModel):
+class PeriodDurationEnvelope(_QuantityModel):
     """
     Period-dependent physical duration envelope.
 

@@ -33,6 +33,7 @@ from pce.physics import (
 )
 from pce.schemas import BoundsDistribution, StellarParameters
 from utils.constants import (
+    G,
     MIN_TRANSITS_DEFAULT,
     MIN_TRANSIT_DEPTH,
     N_MC_SAMPLES_DEFAULT,
@@ -276,8 +277,51 @@ def run_monte_carlo(
     # 3. Transit geometry
     # ------------------------------------------------------------------
 
+    # The period-duration surface needs one common period grid for all
+    # Monte Carlo stellar realizations. The Roche period alone is not
+    # sufficient: for some stellar realizations the orbital separation at
+    # the Roche period can lie inside the star.
+    #
+    # A transit geometry requires:
+    #
+    #     a > R_star + R_planet_min
+    #
+    # Therefore calculate the minimum geometrically valid period for every
+    # stellar realization and use the largest of those periods as the common
+    # lower edge of the surface.
+
     roche_period_s = roche_period * 86400.0
     period_max_s = period_max_scalar * 86400.0
+
+    # Minimum orbital separation required for the smallest detectable planet.
+    minimum_valid_separation_m = (
+        radius_samples + planet_radius_min_samples_m
+    )
+
+    minimum_valid_period_s = (
+        2.0
+        * np.pi
+        * np.sqrt(
+            minimum_valid_separation_m**3
+            / (
+                G.to(u.m**3 / (u.kg * u.s**2)).value
+                * mass_samples
+            )
+        )
+    )
+
+    minimum_surface_period_s = max(
+        roche_period_s,
+        float(np.max(minimum_valid_period_s)),
+    )
+
+    minimum_surface_period_days = minimum_surface_period_s / 86400.0
+
+    if minimum_surface_period_days >= period_max_scalar:
+        raise ValueError(
+            "No physically valid period-duration surface exists within "
+            "the observation baseline for the sampled stellar realizations."
+        )
 
     # ------------------------------------------------------------------
     # 4. Duration bounds
@@ -329,7 +373,7 @@ def run_monte_carlo(
     # The scalar duration bounds above are retained for backward compatibility.
     # The surface captures the actual dependence of transit duration on period.
     period_grid_days = np.geomspace(
-        roche_period,
+        minimum_surface_period_days,
         period_max_scalar,
         num=n_duration_periods,
     )
@@ -342,16 +386,47 @@ def run_monte_carlo(
     mass_2d = mass_samples[:, None]
     radius_2d = radius_samples[:, None]
     planet_radius_min_2d = planet_radius_min_samples_m[:, None]
-    planet_radius_max_2d = np.full(
-        (n_samples, n_duration_periods),
-        planet_radius_max_m,
-        dtype=np.float64,
-    )
-
     a_surface_m = _vectorized_semi_major_axis(
         period_grid_s_2d,
         mass_2d,
     )
+
+    # The adopted maximum planet radius is also constrained by the available
+    # orbital separation. A planet with radius >= (a - R_star) would overlap
+    # the stellar centre-to-surface geometry required by the central-transit
+    # model and make the arcsin argument invalid.
+    #
+    # Therefore, at each (star, period) point:
+    #
+    #     R_p,max(P) = min(R_PLANET_MAX, a(P) - R_star)
+    #
+    # The next representable floating-point value below the geometric limit
+    # keeps the arcsin argument strictly below 1 while preserving the limiting
+    # physical duration as an upper bound.
+    # Stay a tiny relative distance below the geometric singularity.
+    # Using np.nextafter() on (a - R_star) can still round
+    # R_star + R_planet back to exactly a during the subsequent
+    # floating-point addition. A relative margin avoids that
+    # cancellation while being negligible compared with the
+    # physical uncertainties in the Monte Carlo model.
+    GEOMETRIC_MARGIN = 1e-10
+
+    geometric_radius_max_2d = (
+        a_surface_m * (1.0 - GEOMETRIC_MARGIN)
+        - radius_2d
+    )
+
+    planet_radius_max_surface_2d = np.minimum(
+        planet_radius_max_m,
+        geometric_radius_max_2d,
+    )
+
+    if np.any(planet_radius_max_surface_2d <= 0.0):
+        raise ValueError(
+            "Period-duration surface contains orbital periods for which "
+            "no positive planet radius can fit outside the sampled stellar "
+            "radius."
+        )
 
     duration_surface_min_hr = _vectorized_transit_duration_grazing_onset(
         period_grid_s_2d,
@@ -363,7 +438,7 @@ def run_monte_carlo(
     duration_surface_max_hr = _vectorized_transit_duration_central(
         period_grid_s_2d,
         radius_2d,
-        planet_radius_max_2d,
+        planet_radius_max_surface_2d,
         mass_2d,
     )
 
