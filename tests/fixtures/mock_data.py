@@ -34,42 +34,41 @@ from pce.schemas import StellarParameters
 # ---------------------------------------------------------------------------
 
 MOCK_TIC8_ROW_SOLAR = {
-    # Identifiers
-    "ID": "25155310",
-    # Stellar parameters — real TIC-8 v8.2 column names
-    # Source: TIC v8.2 schema (Paegert et al. 2021)
-    "Mass":      1.03,
+    "ID": 12345678,
+    "GAIA": 123456789012345678,
+
+    "Teff": 5765,
+    "eneg_Teff": 80,
+    "epos_Teff": 80,
+
+    "rad": 1.13,
+    "eneg_Rad": 0.05,
+    "epos_Rad": 0.05,
+
+    "mass": 1.03,
     "eneg_Mass": 0.07,
     "epos_Mass": 0.07,
-    "Rad":       1.13,
-    "eneg_Rad":  0.05,
-    "epos_Rad":  0.05,
-    "Teff":      5765.0,
-    "eneg_Teff": 80.0,
-    "epos_Teff": 80.0,
-    "Lum":       1.35,
-    "eneg_lum":  0.12,
-    "epos_lum":  0.12,
-    # Gaia source_id (TIC-8 "GAIA" column) — used for Gaia fallback
-    "GAIA":      "3340074870763823104",
-    "Version":   "8.2",
+
+    "lum": 1.35,
+    "eneg_Lum": 0.12,
+    "epos_Lum": 0.12,
 }
 
 # Edge case: star with asymmetric uncertainties (hot subgiant)
 MOCK_TIC8_ROW_ASYMMETRIC = {
     "ID":        "99999001",
-    "Mass":      1.45,
+    "mass":      1.45,
     "eneg_Mass": 0.08,
     "epos_Mass": 0.15,      # noticeably asymmetric
-    "Rad":       1.80,
+    "rad":       1.80,
     "eneg_Rad":  0.10,
     "epos_Rad":  0.20,
     "Teff":      6400.0,
     "eneg_Teff": 100.0,
     "epos_Teff": 150.0,
-    "Lum":       4.20,
-    "eneg_lum":  0.50,
-    "epos_lum":  0.80,
+    "lum":       4.20,
+    "eneg_Lum":  0.50,
+    "epos_Lum":  0.80,
     "GAIA":      "99999001000000000",
     "Version":   "8.2",
 }
@@ -77,18 +76,18 @@ MOCK_TIC8_ROW_ASYMMETRIC = {
 # Edge case: M-dwarf (small, cool, faint)
 MOCK_TIC8_ROW_MDWARF = {
     "ID":        "99999002",
-    "Mass":      0.35,
+    "mass":      0.35,
     "eneg_Mass": 0.03,
     "epos_Mass": 0.03,
-    "Rad":       0.36,
+    "rad":       0.36,
     "eneg_Rad":  0.02,
     "epos_Rad":  0.02,
     "Teff":      3400.0,
     "eneg_Teff": 50.0,
     "epos_Teff": 50.0,
-    "Lum":       0.025,
-    "eneg_lum":  0.003,
-    "epos_lum":  0.003,
+    "lum":       0.025,
+    "eneg_Lum":  0.003,
+    "epos_Lum":  0.003,
     "GAIA":      "99999002000000000",
     "Version":   "8.2",
 }
@@ -96,18 +95,18 @@ MOCK_TIC8_ROW_MDWARF = {
 # Bad data: negative mass — should be rejected by validation
 MOCK_TIC8_ROW_BAD_NEGATIVE_MASS = {
     "ID":        "99999003",
-    "Mass":      -0.5,       # invalid
+    "mass":      -0.5,       # invalid
     "eneg_Mass": 0.05,
     "epos_Mass": 0.05,
-    "Rad":       1.0,
+    "rad":       1.0,
     "eneg_Rad":  0.03,
     "epos_Rad":  0.03,
     "Teff":      5000.0,
     "eneg_Teff": 50.0,
     "epos_Teff": 50.0,
-    "Lum":       0.8,
-    "eneg_lum":  0.05,
-    "epos_lum":  0.05,
+    "lum":       0.8,
+    "eneg_Lum":  0.05,
+    "epos_Lum":  0.05,
     "GAIA":      "99999003000000000",
     "Version":   "8.2",
 }
@@ -115,18 +114,18 @@ MOCK_TIC8_ROW_BAD_NEGATIVE_MASS = {
 # Bad data: missing uncertainties (NaN) — should be rejected
 MOCK_TIC8_ROW_MISSING_UNCERTAINTIES = {
     "ID":        "99999004",
-    "Mass":      1.0,
+    "mass":      1.0,
     "eneg_Mass": float("nan"),   # missing
     "epos_Mass": float("nan"),   # missing
-    "Rad":       1.0,
+    "rad":       1.0,
     "eneg_Rad":  float("nan"),
     "epos_Rad":  float("nan"),
     "Teff":      5778.0,
     "eneg_Teff": float("nan"),
     "epos_Teff": float("nan"),
-    "Lum":       1.0,
-    "eneg_lum":  float("nan"),
-    "epos_lum":  float("nan"),
+    "lum":       1.0,
+    "eneg_Lum":  float("nan"),
+    "epos_Lum":  float("nan"),
     "GAIA":      "99999004000000000",
     "Version":   "8.2",
 }

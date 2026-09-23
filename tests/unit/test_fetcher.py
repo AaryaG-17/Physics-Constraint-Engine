@@ -134,20 +134,20 @@ class TestExtractTic8:
 
     def test_missing_mass_raises(self):
         row = dict(MOCK_TIC8_ROW_SOLAR)
-        row["Mass"] = None
+        row["mass"] = None
         with pytest.raises(ValueError, match="mass"):
             _extract_tic8("TIC_25155310", row)
 
     def test_nan_mass_raises(self):
         row = dict(MOCK_TIC8_ROW_SOLAR)
-        row["Mass"] = float("nan")
+        row["mass"] = float("nan")
         with pytest.raises(ValueError, match="mass"):
             _extract_tic8("TIC_25155310", row)
     
     def test_masked_mass_raises(self):
         """Astropy/NumPy masked catalog values are rejected cleanly."""
         row = dict(MOCK_TIC8_ROW_SOLAR)
-        row["Mass"] = np.ma.masked
+        row["mass"] = np.ma.masked
 
         with pytest.raises(ValueError, match="mass"):
             _extract_tic8("TIC_25155310", row)
@@ -155,15 +155,52 @@ class TestExtractTic8:
     def test_missing_uncertainty_raises(self):
         row = dict(MOCK_TIC8_ROW_SOLAR)
         row["eneg_Mass"] = None
-        with pytest.raises(ValueError, match="mass lower uncertainty"):
+        with pytest.raises(ValueError, match="TIC-8 uncertainty for 'mass'"):
             _extract_tic8("TIC_25155310", row)
 
     def test_missing_luminosity_raises(self):
         row = dict(MOCK_TIC8_ROW_SOLAR)
-        row["Lum"] = float("nan")
+        row["lum"] = float("nan")
         with pytest.raises(ValueError, match="luminosity"):
             _extract_tic8("TIC_25155310", row)
 
+
+    def test_tic_symmetric_uncertainty_fallback(self):
+        """Symmetric e_* uncertainties are used when asymmetric values are unavailable."""
+        row = dict(MOCK_TIC8_ROW_SOLAR)
+
+        # Simulate the L 98-59 situation:
+        # asymmetric uncertainties are unavailable,
+        # but symmetric TIC uncertainties are available.
+        row["eneg_Mass"] = float("nan")
+        row["epos_Mass"] = float("nan")
+        row["e_mass"] = 0.03
+
+        row["eneg_Rad"] = float("nan")
+        row["epos_Rad"] = float("nan")
+        row["e_rad"] = 0.02
+
+        row["eneg_Teff"] = float("nan")
+        row["epos_Teff"] = float("nan")
+        row["e_Teff"] = 50.0
+
+        row["eneg_Lum"] = float("nan")
+        row["epos_Lum"] = float("nan")
+        row["e_lum"] = 0.05
+
+        result = _extract_tic8("TIC_25155310", row)
+
+        assert result["mass_err_lo"].to(u.M_sun).value == pytest.approx(0.03)
+        assert result["mass_err_hi"].to(u.M_sun).value == pytest.approx(0.03)
+
+        assert result["radius_err_lo"].to(u.R_sun).value == pytest.approx(0.02)
+        assert result["radius_err_hi"].to(u.R_sun).value == pytest.approx(0.02)
+
+        assert result["teff_err_lo"].to(u.K).value == pytest.approx(50.0)
+        assert result["teff_err_hi"].to(u.K).value == pytest.approx(50.0)
+
+        assert result["luminosity_err_lo"].to(u.L_sun).value == pytest.approx(0.05)
+        assert result["luminosity_err_hi"].to(u.L_sun).value == pytest.approx(0.05)
 
 # ---------------------------------------------------------------------------
 # 3. _extract_gaia
@@ -202,8 +239,8 @@ class TestExtractGaia:
 
     def test_catalog_source_is_gaia(self):
         params = _extract_gaia("TIC_25155310", MOCK_GAIA_ROW_SOLAR, partial_tic8={})
-        assert params["catalog_source"] == "Gaia"
-        assert params["catalog_version"] == "DR3"
+        assert params["catalog_source"] == "TIC-8+Gaia"
+        assert params["catalog_version"] == "TIC-8 + DR3"
 
     def test_missing_gaia_field_raises(self):
         row = dict(MOCK_GAIA_ROW_SOLAR)
@@ -417,13 +454,13 @@ class TestFetchStellarParams:
     def test_gaia_fallback_on_incomplete_tic8(self, tmp_cache):
         """When TIC-8 is missing a field, Gaia fallback is used."""
         incomplete_row = dict(MOCK_TIC8_ROW_SOLAR)
-        incomplete_row["Lum"] = float("nan")   # force TIC-8 extraction to fail
+        incomplete_row["lum"] = float("nan")   # force TIC-8 extraction to fail
 
         with patch("pce.fetcher._query_tic8", return_value=incomplete_row), \
              patch("pce.fetcher._query_gaia", return_value=MOCK_GAIA_ROW_SOLAR):
             result = fetch_stellar_params("TIC_25155310", cache_dir=tmp_cache)
 
-        assert result.catalog_source == "Gaia"
+        assert result.catalog_source == "TIC-8+Gaia"
         assert isinstance(result, StellarParameters)
 
     def test_mdwarf_params_correct(self, tmp_cache):
