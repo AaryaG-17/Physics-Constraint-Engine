@@ -15,7 +15,7 @@ import numpy as np
 
 sys.path.insert(0, "src")
 
-from pce.schemas import BoundsDistribution, ZoneBounds
+from pce.schemas import BoundsDistribution, PeriodDurationEnvelope, ZoneBounds
 from pce.classifier import classify_zones
 from pce.sampler import run_monte_carlo
 from tests.fixtures.mock_data import STELLAR_PARAMS_SOLAR
@@ -29,6 +29,9 @@ def _make_dist(
     period_min=None, period_max=None,
     duration_min=None, duration_max=None,
     depth_min=None, depth_max=None,
+    duration_surface_periods=None,
+    duration_surface_min_hr=None,
+    duration_surface_max_hr=None,
     n=10_000, seed=42,
 ) -> BoundsDistribution:
     """Build a BoundsDistribution from explicit arrays or defaults."""
@@ -43,6 +46,9 @@ def _make_dist(
         duration_max_samples = duration_max if duration_max is not None else rng.uniform(3.0, 6.0, n),
         depth_min_samples    = depth_min    if depth_min    is not None else np.full(n, 200e-6),
         depth_max_samples    = depth_max    if depth_max    is not None else rng.uniform(0.001, 0.05, n),
+        duration_surface_periods = duration_surface_periods,
+        duration_surface_min_hr = duration_surface_min_hr,
+        duration_surface_max_hr = duration_surface_max_hr,
     )
 
 
@@ -80,6 +86,33 @@ class TestClassifyZonesReturnType:
         assert z2.period_min is not None
         assert z2.period_max is not None
 
+
+    def test_surface_is_attached_when_present(self):
+        n = 1000
+        periods = np.geomspace(0.2, 13.5, 8)
+        rng = np.random.default_rng(123)
+        surface_min = rng.uniform(0.1, 0.5, (n, periods.size))
+        surface_max = surface_min + rng.uniform(1.0, 3.0, (n, periods.size))
+
+        dist = _make_dist(
+            n=n,
+            duration_surface_periods=periods,
+            duration_surface_min_hr=surface_min,
+            duration_surface_max_hr=surface_max,
+        )
+
+        z1, z2, z3 = classify_zones(dist)
+
+        assert isinstance(z1.period_duration_envelope, PeriodDurationEnvelope)
+        assert isinstance(z2.period_duration_envelope, PeriodDurationEnvelope)
+        assert z3.period_duration_envelope is None
+
+        assert np.array_equal(
+            z1.period_duration_envelope.periods,
+            periods,
+        )
+        assert z1.period_duration_envelope.duration_min.shape == periods.shape
+        assert z1.period_duration_envelope.duration_max.shape == periods.shape
 
 # ---------------------------------------------------------------------------
 # 2. Zone 1 ⊆ Zone 2 — Zone 1 must always be tighter

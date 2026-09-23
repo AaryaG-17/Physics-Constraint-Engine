@@ -17,6 +17,7 @@ Each function gets:
 """
 
 import math
+import numpy as np
 import pytest
 from astropy import units as u
 from astropy.units import Quantity
@@ -32,6 +33,11 @@ from pce.physics import (
     transit_depth,
     minimum_detectable_planet_radius,
     maximum_period_from_baseline,
+    _vectorized_minimum_detectable_planet_radius,
+    _vectorized_transit_depth,
+    _vectorized_transit_duration_central,
+    _vectorized_transit_duration_grazing_onset,
+    _vectorized_semi_major_axis,
     R_PLANET_MAX,
 )
 
@@ -449,3 +455,91 @@ class TestRPlanetMax:
 
     def test_is_quantity(self):
         assert isinstance(R_PLANET_MAX, Quantity)
+
+
+# ---------------------------------------------------------------------------
+# Vectorised physics helpers
+# ---------------------------------------------------------------------------
+
+def test_vectorized_semi_major_axis_matches_scalar():
+    periods_s = np.array([10.0, 20.0, 40.0]) * 86400.0
+    masses_kg = np.array([1.0, 0.8, 1.2]) * u.M_sun.to(u.kg)
+
+    result = _vectorized_semi_major_axis(periods_s, masses_kg)
+    expected = np.array([
+        semi_major_axis(p * u.day, m * u.M_sun).to_value(u.m)
+        for p, m in zip([10.0, 20.0, 40.0], [1.0, 0.8, 1.2])
+    ])
+
+    assert np.allclose(result, expected)
+
+
+def test_vectorized_duration_helpers_match_scalar():
+    periods_s = np.array([5.0, 10.0, 20.0]) * 86400.0
+    radii_m = np.array([1.0, 0.9, 1.1]) * u.R_sun.to(u.m)
+    planet_radii_m = np.array([1.0, 1.5, 2.0]) * u.R_earth.to(u.m)
+    masses_kg = np.array([1.0, 0.9, 1.1]) * u.M_sun.to(u.kg)
+
+    central = _vectorized_transit_duration_central(
+        periods_s, radii_m, planet_radii_m, masses_kg
+    )
+    grazing = _vectorized_transit_duration_grazing_onset(
+        periods_s, radii_m, planet_radii_m, masses_kg
+    )
+
+    expected_central = np.array([
+        transit_duration_central(
+            p * u.day, r * u.R_sun, rp * u.R_earth, m * u.M_sun
+        ).to_value(u.hour)
+        for p, r, rp, m in zip(
+            [5.0, 10.0, 20.0], [1.0, 0.9, 1.1], [1.0, 1.5, 2.0], [1.0, 0.9, 1.1]
+        )
+    ])
+    expected_grazing = np.array([
+        transit_duration_grazing_onset(
+            p * u.day, r * u.R_sun, rp * u.R_earth, m * u.M_sun
+        ).to_value(u.hour)
+        for p, r, rp, m in zip(
+            [5.0, 10.0, 20.0], [1.0, 0.9, 1.1], [1.0, 1.5, 2.0], [1.0, 0.9, 1.1]
+        )
+    ])
+
+    assert np.allclose(central, expected_central)
+    assert np.allclose(grazing, expected_grazing)
+    assert np.all(grazing < central)
+
+
+def test_vectorized_depth_and_minimum_radius_match_scalar():
+    star_radii_m = np.array([0.8, 1.0, 1.2]) * u.R_sun.to(u.m)
+    planet_radii_m = np.array([1.0, 2.0, 3.0]) * u.R_earth.to(u.m)
+    depth_floor = 200e-6
+
+    depths = _vectorized_transit_depth(planet_radii_m, star_radii_m)
+    min_radii = _vectorized_minimum_detectable_planet_radius(
+        star_radii_m, depth_floor
+    )
+
+    expected_depths = np.array([
+        transit_depth(rp * u.R_earth, rs * u.R_sun)
+        for rp, rs in zip([1.0, 2.0, 3.0], [0.8, 1.0, 1.2])
+    ])
+    expected_min_radii = np.array([
+        minimum_detectable_planet_radius(rs * u.R_sun, depth_floor).to_value(u.m)
+        for rs in [0.8, 1.0, 1.2]
+    ])
+
+    assert np.allclose(depths, expected_depths)
+    assert np.allclose(min_radii, expected_min_radii)
+
+
+def test_vectorized_duration_returns_nan_for_invalid_geometry():
+    periods_s = np.array([1.0]) * 86400.0
+    radii_m = np.array([10.0]) * u.R_sun.to(u.m)
+    planet_radii_m = np.array([1.0]) * u.R_earth.to(u.m)
+    masses_kg = np.array([1.0]) * u.M_sun.to(u.kg)
+
+    result = _vectorized_transit_duration_central(
+        periods_s, radii_m, planet_radii_m, masses_kg
+    )
+
+    assert np.isnan(result[0])

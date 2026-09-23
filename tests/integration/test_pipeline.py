@@ -77,12 +77,32 @@ class TestPceRunEndToEnd:
 
     def test_run_different_seeds_differ(self, tmp_path):
         with self._mock_fetch():
-            zm1 = run("TIC_25155310", 27.0, n_mc_samples=1000, seed=1,
-                      force_refetch=True)
+            zm1 = run(
+                "TIC_25155310",
+                27.0,
+                n_mc_samples=1000,
+                seed=1,
+                force_refetch=True,
+            )
+
         with self._mock_fetch():
-            zm2 = run("TIC_25155310", 27.0, n_mc_samples=1000, seed=2,
-                      force_refetch=True)
-        assert zm1.zone1.period_min != zm2.zone1.period_min
+            zm2 = run(
+                "TIC_25155310",
+                27.0,
+                n_mc_samples=1000,
+                seed=2,
+                force_refetch=True,
+            )
+
+        # Deterministic physical bounds remain identical across seeds.
+        assert zm1.zone1.period_min == zm2.zone1.period_min
+        assert zm1.zone1.period_max == zm2.zone1.period_max
+        assert zm1.zone1.depth_min == zm2.zone1.depth_min
+
+        # Bounds derived from Monte Carlo stellar uncertainty must vary.
+        assert zm1.zone1.duration_min != zm2.zone1.duration_min
+        assert zm1.zone1.duration_max != zm2.zone1.duration_max
+        assert zm1.zone1.depth_max != zm2.zone1.depth_max
 
     def test_run_zone1_inside_zone2(self, tmp_path):
         with self._mock_fetch():

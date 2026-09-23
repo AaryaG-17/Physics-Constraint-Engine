@@ -268,7 +268,14 @@ class TestReproducibility:
     def test_different_seed_different_output(self):
         d1 = run_monte_carlo(STELLAR_PARAMS_SOLAR, 27.0, seed=1, n_samples=1000)
         d2 = run_monte_carlo(STELLAR_PARAMS_SOLAR, 27.0, seed=2, n_samples=1000)
-        assert not np.array_equal(d1.period_min_samples, d2.period_min_samples)
+
+        # Deterministic physical assumptions must remain identical.
+        assert np.array_equal(d1.period_min_samples, d2.period_min_samples)
+
+        # Stellar-uncertainty propagation must still depend on the seed.
+        assert not np.array_equal(d1.duration_min_samples, d2.duration_min_samples)
+        assert not np.array_equal(d1.duration_max_samples, d2.duration_max_samples)
+        assert not np.array_equal(d1.depth_max_samples, d2.depth_max_samples)
 
     def test_n_samples_respected(self):
         for n in [100, 500, 10_000]:

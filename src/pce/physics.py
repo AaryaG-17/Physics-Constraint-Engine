@@ -41,6 +41,8 @@ Maximum period:
 
 import math
 
+import numpy as np
+
 from astropy import units as u
 from astropy.units import Quantity
 
@@ -356,3 +358,86 @@ def maximum_period_from_baseline(
         )
 
     return (baseline / n_min_transits).to(u.day)
+
+
+# ---------------------------------------------------------------------------
+# Vectorised physics helpers
+# ---------------------------------------------------------------------------
+
+# These helpers intentionally live beside the scalar implementations so the
+# sampler does not maintain a second copy of the physical equations. They
+# accept plain NumPy arrays in SI units and return plain NumPy arrays.
+
+def _vectorized_semi_major_axis(
+    period_s: np.ndarray,
+    star_mass_kg: np.ndarray,
+) -> np.ndarray:
+    """Vectorised Kepler third law; inputs are SI arrays."""
+    period_s = np.asarray(period_s, dtype=np.float64)
+    star_mass_kg = np.asarray(star_mass_kg, dtype=np.float64)
+
+    return (
+        (G.to(u.m**3 / (u.kg * u.s**2)).value * star_mass_kg * period_s**2)
+        / (4.0 * math.pi**2)
+    ) ** (1.0 / 3.0)
+
+
+def _vectorized_transit_duration_central(
+    period_s: np.ndarray,
+    star_radius_m: np.ndarray,
+    planet_radius_m: np.ndarray,
+    star_mass_kg: np.ndarray,
+) -> np.ndarray:
+    """Vectorised central T14 duration in hours; invalid geometries are NaN."""
+    period_s = np.asarray(period_s, dtype=np.float64)
+    star_radius_m = np.asarray(star_radius_m, dtype=np.float64)
+    planet_radius_m = np.asarray(planet_radius_m, dtype=np.float64)
+    star_mass_kg = np.asarray(star_mass_kg, dtype=np.float64)
+
+    a_m = _vectorized_semi_major_axis(period_s, star_mass_kg)
+    chord = (star_radius_m + planet_radius_m) / a_m
+    valid = np.isfinite(chord) & (chord > 0.0) & (chord < 1.0)
+
+    result = np.full(np.broadcast(period_s, star_radius_m, planet_radius_m, star_mass_kg).shape, np.nan, dtype=np.float64)
+    result[valid] = (period_s[valid] / math.pi) * np.arcsin(chord[valid]) / 3600.0
+    return result
+
+
+def _vectorized_transit_duration_grazing_onset(
+    period_s: np.ndarray,
+    star_radius_m: np.ndarray,
+    planet_radius_m: np.ndarray,
+    star_mass_kg: np.ndarray,
+) -> np.ndarray:
+    """Vectorised grazing-onset T14 duration in hours; invalid geometries are NaN."""
+    period_s = np.asarray(period_s, dtype=np.float64)
+    star_radius_m = np.asarray(star_radius_m, dtype=np.float64)
+    planet_radius_m = np.asarray(planet_radius_m, dtype=np.float64)
+    star_mass_kg = np.asarray(star_mass_kg, dtype=np.float64)
+
+    a_m = _vectorized_semi_major_axis(period_s, star_mass_kg)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        chord = (2.0 * np.sqrt(star_radius_m * planet_radius_m)) / a_m
+    valid = np.isfinite(chord) & (chord > 0.0) & (chord < 1.0)
+
+    result = np.full(np.broadcast(period_s, star_radius_m, planet_radius_m, star_mass_kg).shape, np.nan, dtype=np.float64)
+    result[valid] = (period_s[valid] / math.pi) * np.arcsin(chord[valid]) / 3600.0
+    return result
+
+
+def _vectorized_transit_depth(
+    planet_radius_m: np.ndarray,
+    star_radius_m: np.ndarray,
+) -> np.ndarray:
+    """Vectorised uniform-disk transit depth."""
+    planet_radius_m = np.asarray(planet_radius_m, dtype=np.float64)
+    star_radius_m = np.asarray(star_radius_m, dtype=np.float64)
+    return (planet_radius_m / star_radius_m) ** 2
+
+
+def _vectorized_minimum_detectable_planet_radius(
+    star_radius_m: np.ndarray,
+    depth_floor: float,
+) -> np.ndarray:
+    """Vectorised minimum planet radius from the adopted depth floor."""
+    return np.asarray(star_radius_m, dtype=np.float64) * math.sqrt(depth_floor)
