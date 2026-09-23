@@ -44,7 +44,7 @@ import math
 from astropy import units as u
 from astropy.units import Quantity
 
-from utils.constants import G, C_ROCHE
+from utils.constants import G
 
 # ---------------------------------------------------------------------------
 # Planet radius bounds (physical limits)

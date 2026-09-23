@@ -238,9 +238,14 @@ class TestPhysicalInvariants:
         assert np.allclose(dist.depth_min_samples, floor)
 
     def test_period_min_range_physically_plausible(self, dist):
-        """Roche period should be between ~0.1 and ~2 days for typical stars."""
-        assert dist.period_min_samples.min() > 0.1
-        assert dist.period_min_samples.max() < 2.0
+            """Roche period should be between ~0.1 and ~3.1 days for typical stars.
+            
+            With corrected planet density range (0.03–14.1 g/cm³):
+            - Lower bound 0.03 g/cm³ (super-puff floor) → P_Roche ≈ 3.03 days
+            - Upper bound 14.1 g/cm³ (TOI-4603b) → P_Roche ≈ 0.33 days
+            """
+            assert dist.period_min_samples.min() > 0.1
+            assert dist.period_min_samples.max() < 3.1
 
     def test_duration_max_range_hours(self, dist):
         """Max transit duration for a TESS-like baseline should be 1-20 hrs."""
