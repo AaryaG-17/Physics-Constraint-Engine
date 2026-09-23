@@ -23,6 +23,7 @@ Error contract:
 
 import math
 from datetime import datetime, timezone
+import numpy as np
 from pathlib import Path
 from typing import Optional
 
@@ -177,6 +178,27 @@ def _query_tic8(tic_id: str) -> dict:
     # astroquery returns an astropy Table — take first row as dict
     return {col: result[col][0] for col in result.colnames}
 
+def _is_missing_catalog_value(value: object) -> bool:
+    """
+    Return True when a catalog value is missing, masked, or non-finite.
+
+    Handles:
+        - None
+        - Astropy/NumPy masked values
+        - NaN
+        - positive/negative infinity
+        - non-numeric values
+    """
+    if value is None:
+        return True
+
+    if np.ma.is_masked(value):
+        return True
+
+    try:
+        return not math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return True
 
 def _extract_tic8(tic_id: str, row: dict) -> dict:
     """
@@ -193,11 +215,13 @@ def _extract_tic8(tic_id: str, row: dict) -> dict:
     """
     def _get(key: str, unit: u.Unit, label: str) -> Quantity:
         val = row.get(key)
-        if val is None or (isinstance(val, float) and math.isnan(val)):
+
+        if _is_missing_catalog_value(val):
             raise ValueError(
-                f"TIC-8 field '{key}' is missing or NaN for {tic_id} "
+                f"TIC-8 field '{key}' is missing or non-finite for {tic_id} "
                 f"(required for {label})"
             )
+
         return float(val) * unit
 
     # Real TIC-8 v8.2 column names (from official schema):
@@ -297,10 +321,14 @@ def _query_gaia(tic_id: str, gaia_source_id: str) -> dict:
 
     return dict(zip(result.colnames, result[0]))
 
-
 def _extract_gaia(tic_id: str, gaia_row: dict, partial_tic8: dict) -> dict:
     """
-    Extract stellar parameters from Gaia DR3 row.
+    Extract stellar parameters using Gaia DR3 to complete an incomplete
+    TIC-8 parameter set.
+
+    TIC-8 values take priority where the complete central value and both
+    uncertainties are present and valid. Gaia DR3 supplies only the fields
+    that TIC-8 cannot provide.
 
     Gaia uncertainty convention:
         <param>_lower  — 16th percentile value
@@ -310,11 +338,38 @@ def _extract_gaia(tic_id: str, gaia_row: dict, partial_tic8: dict) -> dict:
         err_lo = central - p16
         err_hi = p84 - central
 
-    TIC-8 fields take priority where they are present and valid.
-
     Raises:
         ValueError: if any required field is missing from both catalogs
     """
+
+    def _tic8_value_and_errors(
+        val_key: str,
+        lo_key: str,
+        hi_key: str,
+        unit: u.Unit,
+        label: str,
+    ):
+        """
+        Return a complete TIC-8 parameter triplet if all three values
+        are present and valid. Otherwise return None.
+        """
+        val = partial_tic8.get(val_key)
+        lo = partial_tic8.get(lo_key)
+        hi = partial_tic8.get(hi_key)
+
+        if (
+            _is_missing_catalog_value(val)
+            or _is_missing_catalog_value(lo)
+            or _is_missing_catalog_value(hi)
+        ):
+            return None
+
+        return (
+            float(val) * unit,
+            float(lo) * unit,
+            float(hi) * unit,
+        )
+
     def _gaia_value_and_errors(
         val_key: str,
         lo_key: str,
@@ -322,48 +377,125 @@ def _extract_gaia(tic_id: str, gaia_row: dict, partial_tic8: dict) -> dict:
         unit: u.Unit,
         label: str,
     ):
-        """Extract central + asymmetric errors from Gaia percentile columns."""
+        """
+        Extract central + asymmetric errors from Gaia percentile columns.
+        """
         val = gaia_row.get(val_key)
-        lo  = gaia_row.get(lo_key)
-        hi  = gaia_row.get(hi_key)
+        lo = gaia_row.get(lo_key)
+        hi = gaia_row.get(hi_key)
 
         for name, v in [(val_key, val), (lo_key, lo), (hi_key, hi)]:
-            if v is None or (isinstance(v, float) and math.isnan(float(v))):
+            if _is_missing_catalog_value(v):
                 raise ValueError(
-                    f"Gaia DR3 field '{name}' is missing or NaN for {tic_id} "
-                    f"(required for {label})"
+                    f"Gaia DR3 field '{name}' is missing or non-finite for "
+                    f"{tic_id} (required for {label})"
                 )
 
-        central  = float(val)
-        err_lo   = max(central - float(lo), 0.0)  # p16 → lower sigma
-        err_hi   = max(float(hi) - central, 0.0)  # p84 → upper sigma
+        central = float(val)
+        err_lo = max(central - float(lo), 0.0)
+        err_hi = max(float(hi) - central, 0.0)
 
-        return central * unit, err_lo * unit, err_hi * unit
+        return (
+            central * unit,
+            err_lo * unit,
+            err_hi * unit,
+        )
 
-    mass, mass_err_lo, mass_err_hi = _gaia_value_and_errors(
-        "mass_flame", "mass_flame_lower", "mass_flame_upper", u.M_sun, "mass"
+    def _resolve_parameter(
+        tic_val_key: str,
+        tic_lo_key: str,
+        tic_hi_key: str,
+        gaia_val_key: str,
+        gaia_lo_key: str,
+        gaia_hi_key: str,
+        unit: u.Unit,
+        label: str,
+    ):
+        """
+        Prefer a complete TIC-8 parameter; otherwise use Gaia DR3.
+        """
+        tic_values = _tic8_value_and_errors(
+            tic_val_key,
+            tic_lo_key,
+            tic_hi_key,
+            unit,
+            label,
+        )
+
+        if tic_values is not None:
+            return tic_values
+
+        return _gaia_value_and_errors(
+            gaia_val_key,
+            gaia_lo_key,
+            gaia_hi_key,
+            unit,
+            label,
+        )
+
+    mass, mass_err_lo, mass_err_hi = _resolve_parameter(
+        "Mass",
+        "eneg_Mass",
+        "epos_Mass",
+        "mass_flame",
+        "mass_flame_lower",
+        "mass_flame_upper",
+        u.M_sun,
+        "mass",
     )
-    radius, radius_err_lo, radius_err_hi = _gaia_value_and_errors(
-        "radius_flame", "radius_flame_lower", "radius_flame_upper", u.R_sun, "radius"
+
+    radius, radius_err_lo, radius_err_hi = _resolve_parameter(
+        "Rad",
+        "eneg_Rad",
+        "epos_Rad",
+        "radius_flame",
+        "radius_flame_lower",
+        "radius_flame_upper",
+        u.R_sun,
+        "radius",
     )
-    teff, teff_err_lo, teff_err_hi = _gaia_value_and_errors(
-        "teff_gspphot", "teff_gspphot_lower", "teff_gspphot_upper", u.K, "Teff"
+
+    teff, teff_err_lo, teff_err_hi = _resolve_parameter(
+        "Teff",
+        "eneg_Teff",
+        "epos_Teff",
+        "teff_gspphot",
+        "teff_gspphot_lower",
+        "teff_gspphot_upper",
+        u.K,
+        "Teff",
     )
-    luminosity, luminosity_err_lo, luminosity_err_hi = _gaia_value_and_errors(
-        "lum_flame", "lum_flame_lower", "lum_flame_upper", u.L_sun, "luminosity"
+
+    luminosity, luminosity_err_lo, luminosity_err_hi = _resolve_parameter(
+        "Lum",
+        "eneg_lum",
+        "epos_lum",
+        "lum_flame",
+        "lum_flame_lower",
+        "lum_flame_upper",
+        u.L_sun,
+        "luminosity",
     )
 
     return {
         "tic_id": tic_id,
-        "catalog_source": "Gaia",
-        "catalog_version": "DR3",
+        "catalog_source": "TIC-8+Gaia",
+        "catalog_version": "TIC-8 + DR3",
         "fetch_timestamp": datetime.now(timezone.utc),
-        "mass": mass,                         "mass_err_lo": mass_err_lo,
+
+        "mass": mass,
+        "mass_err_lo": mass_err_lo,
         "mass_err_hi": mass_err_hi,
-        "radius": radius,                     "radius_err_lo": radius_err_lo,
+
+        "radius": radius,
+        "radius_err_lo": radius_err_lo,
         "radius_err_hi": radius_err_hi,
-        "teff": teff,                         "teff_err_lo": teff_err_lo,
+
+        "teff": teff,
+        "teff_err_lo": teff_err_lo,
         "teff_err_hi": teff_err_hi,
-        "luminosity": luminosity,             "luminosity_err_lo": luminosity_err_lo,
+
+        "luminosity": luminosity,
+        "luminosity_err_lo": luminosity_err_lo,
         "luminosity_err_hi": luminosity_err_hi,
     }

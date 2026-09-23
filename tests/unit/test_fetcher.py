@@ -13,6 +13,7 @@ Tests cover:
 
 import math
 import sys
+import numpy as np
 import pytest
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -142,6 +143,14 @@ class TestExtractTic8:
         row["Mass"] = float("nan")
         with pytest.raises(ValueError, match="mass"):
             _extract_tic8("TIC_25155310", row)
+    
+    def test_masked_mass_raises(self):
+        """Astropy/NumPy masked catalog values are rejected cleanly."""
+        row = dict(MOCK_TIC8_ROW_SOLAR)
+        row["Mass"] = np.ma.masked
+
+        with pytest.raises(ValueError, match="mass"):
+            _extract_tic8("TIC_25155310", row)
 
     def test_missing_uncertainty_raises(self):
         row = dict(MOCK_TIC8_ROW_SOLAR)
@@ -201,12 +210,87 @@ class TestExtractGaia:
         row["mass_flame"] = float("nan")
         with pytest.raises(ValueError, match="mass"):
             _extract_gaia("TIC_25155310", row, partial_tic8={})
+    
+    def test_masked_gaia_field_raises(self):
+        """Masked Gaia catalog values are rejected before float conversion."""
+        row = dict(MOCK_GAIA_ROW_SOLAR)
+        row["mass_flame"] = np.ma.masked
+
+        with pytest.raises(ValueError, match="mass"):
+            _extract_gaia("TIC_25155310", row, partial_tic8={})
 
     def test_missing_gaia_percentile_raises(self):
         row = dict(MOCK_GAIA_ROW_SOLAR)
         row["mass_flame_lower"] = None
         with pytest.raises(ValueError, match="mass_flame_lower"):
             _extract_gaia("TIC_25155310", row, partial_tic8={})
+
+    def test_tic8_values_take_priority_over_gaia(self):
+        """
+        Complete TIC-8 parameters are retained even when Gaia provides
+        different values.
+        """
+        partial_tic8 = dict(MOCK_TIC8_ROW_SOLAR)
+
+        params = _extract_gaia(
+            "TIC_25155310",
+            MOCK_GAIA_ROW_SOLAR,
+            partial_tic8=partial_tic8,
+        )
+
+        assert params["mass"].to(u.M_sun).value == pytest.approx(1.03)
+        assert params["radius"].to(u.R_sun).value == pytest.approx(1.13)
+        assert params["teff"].to(u.K).value == pytest.approx(5765.0)
+        assert params["luminosity"].to(u.L_sun).value == pytest.approx(1.35)
+
+        assert params["catalog_source"] == "TIC-8+Gaia"
+
+
+    def test_gaia_fills_missing_tic8_parameter(self):
+        """
+        Gaia supplies a parameter when TIC-8 has that parameter masked.
+        Other complete TIC-8 parameters remain unchanged.
+        """
+        partial_tic8 = dict(MOCK_TIC8_ROW_SOLAR)
+        partial_tic8["Mass"] = np.ma.masked
+        partial_tic8["eneg_Mass"] = np.ma.masked
+        partial_tic8["epos_Mass"] = np.ma.masked
+
+        params = _extract_gaia(
+            "TIC_25155310",
+            MOCK_GAIA_ROW_SOLAR,
+            partial_tic8=partial_tic8,
+        )
+
+        # Mass comes from Gaia.
+        assert params["mass"].to(u.M_sun).value == pytest.approx(1.01)
+
+        # Other parameters remain from TIC-8.
+        assert params["radius"].to(u.R_sun).value == pytest.approx(1.13)
+        assert params["teff"].to(u.K).value == pytest.approx(5765.0)
+        assert params["luminosity"].to(u.L_sun).value == pytest.approx(1.35)
+
+        assert params["catalog_source"] == "TIC-8+Gaia"
+
+
+    def test_gaia_missing_field_raises_when_tic8_also_missing(self):
+        """
+        A parameter missing from both TIC-8 and Gaia must still fail.
+        """
+        partial_tic8 = dict(MOCK_TIC8_ROW_SOLAR)
+        partial_tic8["Mass"] = np.ma.masked
+        partial_tic8["eneg_Mass"] = np.ma.masked
+        partial_tic8["epos_Mass"] = np.ma.masked
+
+        gaia_row = dict(MOCK_GAIA_ROW_SOLAR)
+        gaia_row["mass_flame"] = np.ma.masked
+
+        with pytest.raises(ValueError, match="mass_flame"):
+            _extract_gaia(
+                "TIC_25155310",
+                gaia_row,
+                partial_tic8=partial_tic8,
+            )
 
 
 # ---------------------------------------------------------------------------

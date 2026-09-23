@@ -76,7 +76,7 @@ class StellarParameters(_QuantityModel):
     # Catalog metadata
     catalog_source: str = Field(
         default="TIC-8",
-        description="Source catalog: 'TIC-8' or 'Gaia'",
+        description="Source catalog: 'TIC-8' or 'Gaia' or 'TIC-8+Gaia'",
     )
     catalog_version: Optional[str] = Field(
         default=None,
@@ -379,7 +379,7 @@ class ZoneMap(BaseModel):
     observation_baseline_days: float = Field(..., gt=0, description="Observation baseline [days]")
     min_transits: int = Field(..., ge=2, description="Minimum transits required for detection")
     min_transit_depth: float = Field(..., gt=0, description="Minimum detectable depth [dimensionless]")
-    catalog_source: str = Field(..., description="Stellar parameter source: 'TIC-8' or 'Gaia'")
+    catalog_source: str = Field(..., description="Stellar parameter source: 'TIC-8', 'Gaia', or 'TIC-8+Gaia'")
     generated_at: datetime = Field(
         default_factory=datetime.utcnow,
         description="UTC timestamp when this ZoneMap was generated",

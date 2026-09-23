@@ -243,13 +243,13 @@ CONFIRMED_PLANETS = [
         "depth": 0.01056,
     },
     {
-        # TOI-132 b — sub-Neptune, TESS discovery
-        # Source: Dreizler et al. (2020), MNRAS, 493, 536
-        "star_id": "TIC_59873312",
-        "planet_name": "TOI-132 b",
-        "period_day": 1.0116,
-        "duration_hr": 1.40,
-        "depth": 0.00087,
+    # TOI-132 b — sub-Neptune, TESS discovery
+    # Source: Díaz et al. (2020), MNRAS, 493, 973
+    "star_id": "TIC_89020549",
+    "planet_name": "TOI-132 b",
+    "period_day": 2.1097,
+    "duration_hr": 2.63,
+    "depth": 0.00121,
     },
     {
         # HD 209458 b — first transiting planet discovered, benchmark
