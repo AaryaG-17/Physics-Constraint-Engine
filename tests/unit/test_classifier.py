@@ -145,19 +145,13 @@ class TestZoneOrdering:
         z1, z2, _ = zones
         assert z1.depth_min >= z2.depth_min
 
-    def test_zone2_depth_max_matches_numpy_p25(self):
-        """
-        Zone 2 depth_max uses the LOW percentile of depth_max_samples,
-        same direction as period_max/duration_max, so Zone 2's ceiling
-        sits above Zone 1's (wider, inclusive buffer zone).
-        zone2_percentile=0.50 → z2_lo = (1-0.50)/2 * 100 = 25.0
-        """
-        n = 100_000
-        arr = np.random.default_rng(2).uniform(0.001, 0.05, n)
-        dist = _make_dist(depth_max=arr, n=n, seed=2)
-        _, z2, _ = classify_zones(dist, zone2_percentile=0.50)
-        expected = float(np.percentile(arr, 25.0))
-        assert z2.depth_max == pytest.approx(expected, rel=1e-9)
+    def test_zone2_depth_max_ge_zone1_depth_max(self, zones):
+        # depth_max is an upper bound, like period_max/duration_max:
+        # Zone 1 uses z1_lo (e.g. P5), Zone 2 uses z2_lo (e.g. P25).
+        # Since z1_lo < z2_lo, Zone 1 depth_max <= Zone 2 depth_max —
+        # Zone 2 (the buffer/inclusive zone) has the higher ceiling.
+        z1, z2, _ = zones
+        assert z2.depth_max >= z1.depth_max
 
     def test_zone1_period_min_lt_zone1_period_max(self, zones):
         z1, _, _ = zones
@@ -209,17 +203,18 @@ class TestPercentileAccuracy:
         expected = float(np.percentile(arr, 75.0))
         assert z2.duration_min == pytest.approx(expected, rel=1e-9)
 
-    def test_zone2_depth_max_matches_numpy_p75(self):
+    def test_zone2_depth_max_matches_numpy_p25(self):
         """
-        Zone 2 depth_max uses the HIGH percentile of depth_max_samples,
-        so large planets (gas giants) are inside the zone.
-        zone2_percentile=0.50 → z2_hi = (1+0.50)/2 * 100 = 75.0
+        Zone 2 depth_max uses the LOW percentile of depth_max_samples,
+        same direction as period_max/duration_max, so Zone 2's ceiling
+        sits above Zone 1's (wider, inclusive buffer zone).
+        zone2_percentile=0.50 → z2_lo = (1-0.50)/2 * 100 = 25.0
         """
         n = 100_000
         arr = np.random.default_rng(2).uniform(0.001, 0.05, n)
         dist = _make_dist(depth_max=arr, n=n, seed=2)
         _, z2, _ = classify_zones(dist, zone2_percentile=0.50)
-        expected = float(np.percentile(arr, 75.0))
+        expected = float(np.percentile(arr, 25.0))
         assert z2.depth_max == pytest.approx(expected, rel=1e-9)
 
 
