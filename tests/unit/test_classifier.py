@@ -145,12 +145,19 @@ class TestZoneOrdering:
         z1, z2, _ = zones
         assert z1.depth_min >= z2.depth_min
 
-    def test_zone1_depth_max_ge_zone2_depth_max(self, zones):
-        # depth_max uses HIGH percentile for both zones:
-        # Zone 1 uses z1_hi (e.g. P95), Zone 2 uses z2_hi (e.g. P75).
-        # Since z1_hi > z2_hi, Zone 1 depth_max >= Zone 2 depth_max.
-        z1, z2, _ = zones
-        assert z1.depth_max >= z2.depth_max
+    def test_zone2_depth_max_matches_numpy_p25(self):
+        """
+        Zone 2 depth_max uses the LOW percentile of depth_max_samples,
+        same direction as period_max/duration_max, so Zone 2's ceiling
+        sits above Zone 1's (wider, inclusive buffer zone).
+        zone2_percentile=0.50 → z2_lo = (1-0.50)/2 * 100 = 25.0
+        """
+        n = 100_000
+        arr = np.random.default_rng(2).uniform(0.001, 0.05, n)
+        dist = _make_dist(depth_max=arr, n=n, seed=2)
+        _, z2, _ = classify_zones(dist, zone2_percentile=0.50)
+        expected = float(np.percentile(arr, 25.0))
+        assert z2.depth_max == pytest.approx(expected, rel=1e-9)
 
     def test_zone1_period_min_lt_zone1_period_max(self, zones):
         z1, _, _ = zones

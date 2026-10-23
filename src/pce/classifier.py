@@ -62,9 +62,9 @@ def classify_zones(
 
     # Scalar depth bounds.
     z1_depth_min = _pct(bounds_dist.depth_min_samples, z1_lo)
-    z1_depth_max = _pct(bounds_dist.depth_max_samples, z1_hi)
+    z1_depth_max = _pct(bounds_dist.depth_max_samples, z1_lo)
     z2_depth_min = _pct(bounds_dist.depth_min_samples, z2_lo)
-    z2_depth_max = _pct(bounds_dist.depth_max_samples, z2_hi)
+    z2_depth_max = _pct(bounds_dist.depth_max_samples, z2_lo)
 
     def _surface_envelope(
         zone_percentile: float,
